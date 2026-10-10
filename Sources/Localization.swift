@@ -43,6 +43,35 @@ struct L {
         LocalizationManager.shared.currentLanguage == .chinese ? "新建" : "Add"
     }
 
+    static var unlimited: String {
+        LocalizationManager.shared.currentLanguage == .chinese ? "无限连点" : "Run indefinitely"
+    }
+
+    static var rateWindow: String {
+        LocalizationManager.shared.currentLanguage == .chinese ? "每隔 (秒)" : "Every (sec)"
+    }
+
+    static var durationHelp: String {
+        LocalizationManager.shared.currentLanguage == .chinese ?
+            "支持超过 60 秒。Esc 或再次按快捷键可停止。" :
+            "Durations over 60 seconds are supported. Esc or the same hotkey stops clicking."
+    }
+
+    static var unlimitedHelp: String {
+        LocalizationManager.shared.currentLanguage == .chinese ?
+            "按下方次数 / 秒数的频率持续点击。Esc 或再次按快捷键停止。" :
+            "Keep clicking at the count / seconds rate below. Esc or the same hotkey stops clicking."
+    }
+
+    static var stopClicking: String {
+        LocalizationManager.shared.currentLanguage == .chinese ? "停止连点 (Esc)" : "Stop clicking (Esc)"
+    }
+
+    static func unlimitedDescription(cps: Double) -> String {
+        String(format: LocalizationManager.shared.currentLanguage == .chinese ?
+            "∞ 无限 · %.4g 次/秒" : "∞ Unlimited · %.4g CPS", cps)
+    }
+
     // 按钮
     static var leftButton: String {
         LocalizationManager.shared.currentLanguage == .chinese ? "左键" : "Left"
@@ -121,8 +150,8 @@ struct L {
 
     static var currentCPS: String {
         LocalizationManager.shared.currentLanguage == .chinese ?
-            "当前 CPS: %.1f" :
-            "Current CPS: %.1f"
+            "当前 CPS: %.4g" :
+            "Current CPS: %.4g"
     }
 
     // 提示信息

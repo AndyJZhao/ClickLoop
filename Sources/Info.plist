@@ -3,15 +3,15 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>SnapClick</string>
+    <string>ClickLoop</string>
     <key>CFBundleIdentifier</key>
-    <string>com.snapclick.app</string>
+    <string>com.andyjzhao.clickloop</string>
     <key>CFBundleName</key>
-    <string>SnapClick</string>
+    <string>ClickLoop</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>3.1</string>
+    <string>1.0.0</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
@@ -23,8 +23,8 @@
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>NSAccessibilityUsageDescription</key>
-    <string>SnapClick 需要辅助功能权限来监听全局快捷键和模拟鼠标点击，以实现自动连点功能。</string>
+    <string>ClickLoop 需要辅助功能权限来监听全局快捷键和模拟鼠标点击，以实现自动连点功能。</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>SnapClick 需要此权限来控制鼠标事件。</string>
+    <string>ClickLoop 需要此权限来控制鼠标事件。</string>
 </dict>
 </plist>

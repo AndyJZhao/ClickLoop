@@ -5,12 +5,15 @@ import AppKit
 class ClickerViewModel: ObservableObject {
     @Published var schemes: [ClickScheme] = []
     @Published var isRunning: Bool = false
+    @Published var isClicking: Bool = false
 
     private let schemeManager = SchemeManager()
     private let hotkeyMonitor = HotkeyMonitor()
     private let mouseClicker = MouseClicker()
 
     init() {
+        mouseClicker.onRunningChanged = { [weak self] running in self?.isClicking = running }
+        hotkeyMonitor.onEscape = { [weak self] in self?.stopClicking() }
         loadSchemes()
 
         // 如果有已启用的方案，自动启动监听器
@@ -101,10 +104,7 @@ class ClickerViewModel: ObservableObject {
         let newState = schemes[index].isEnabled
         print("🔄 切换方案状态: \(scheme.name), 新状态: \(newState ? "启用" : "禁用")")
 
-        // 异步保存到磁盘（不阻塞 UI）
-        DispatchQueue.global(qos: .background).async {
-            _ = self.schemeManager.updateScheme(at: index, with: self.schemes[index])
-        }
+        _ = schemeManager.updateScheme(at: index, with: schemes[index])
 
         // 更新监听器状态 - 统一处理：重新启动以确保快捷键正确注册
         let enabledCount = schemes.filter { $0.isEnabled }.count
@@ -149,6 +149,7 @@ class ClickerViewModel: ObservableObject {
     // MARK: - 快捷键录制支持
 
     func pauseHotkeyMonitoring() {
+        stopClicking()
         if isRunning {
             hotkeyMonitor.stopMonitoring()
             print("⏸️ 暂停快捷键监听（录制中）")
@@ -195,6 +196,7 @@ class ClickerViewModel: ObservableObject {
             return
         }
 
+        hotkeyMonitor.stopMonitoring()
         // 仅注册已启用方案的快捷键
         for scheme in enabledSchemes {
             registerHotkey(for: scheme)
@@ -206,17 +208,22 @@ class ClickerViewModel: ObservableObject {
         if AXIsProcessTrusted() {
             isRunning = true
             print("✅ 监听器启动完成，isRunning = \(isRunning)")
-            showNotification(title: "SnapClick \(L.started)", message: "\(L.loaded) \(enabledSchemes.count) \(L.schemes)")
+            showNotification(title: "ClickLoop \(L.started)", message: "\(L.loaded) \(enabledSchemes.count) \(L.schemes)")
         } else {
             print("❌ 监听器启动失败：权限未授予")
         }
     }
 
+    func stopClicking() {
+        mouseClicker.stop()
+    }
+
     func stopClicker() {
+        stopClicking()
         hotkeyMonitor.stopMonitoring()
         isRunning = false
 
-        showNotification(title: "SnapClick \(L.stopped)", message: L.clickerStopped)
+        showNotification(title: "ClickLoop \(L.stopped)", message: L.clickerStopped)
     }
 
     private func registerHotkey(for scheme: ClickScheme) {
@@ -229,13 +236,19 @@ class ClickerViewModel: ObservableObject {
                 return
             }
 
+            guard currentScheme.isEnabled else { return }
+            if self.mouseClicker.activeSchemeID == currentScheme.id {
+                self.stopClicking()
+                return
+            }
+
             // 强引用 mouseClicker 以确保执行期间不被释放
             let clicker = self.mouseClicker
             clicker.executeScheme(currentScheme)
 
             self.showNotification(
                 title: L.executing,
-                message: "\(currentScheme.name) - \(currentScheme.clickCount)\(LocalizationManager.shared.currentLanguage == .chinese ? "次" : "x")/\(String(format: "%.1f", currentScheme.totalDuration))\(LocalizationManager.shared.currentLanguage == .chinese ? "秒" : "s")"
+                message: currentScheme.isUnlimited ? L.unlimitedDescription(cps: 1 / currentScheme.clickInterval) : "\(currentScheme.name) - \(currentScheme.clickCount)\(LocalizationManager.shared.currentLanguage == .chinese ? "次" : "x")/\(String(format: "%.1f", currentScheme.totalDuration))\(LocalizationManager.shared.currentLanguage == .chinese ? "秒" : "s")"
             )
         }
     }

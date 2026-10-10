@@ -30,21 +30,29 @@ struct ClickScheme: Hashable, Identifiable, Codable {
     var totalDuration: TimeInterval // 总完成时间（秒）
     var hotkey: Hotkey
     var isEnabled: Bool  // 方案启用状态
+    var isUnlimited: Bool = false
 
     /// 计算每次点击的间隔时间（秒）
     var clickInterval: TimeInterval {
-        guard clickCount > 1 else { return 0 }
+        guard clickCount > 0 else { return 0 }
         return totalDuration / Double(clickCount)
     }
 
-    init(name: String, button: MouseButton, clickCount: Int, totalDuration: TimeInterval, hotkey: Hotkey, isEnabled: Bool = false) {
-        self.id = UUID()
+    static func isValidTiming(clickCount: Int, duration: TimeInterval) -> Bool {
+        let interval = duration / Double(clickCount)
+        return clickCount > 0 && duration.isFinite && duration > 0 &&
+            interval.isFinite && interval >= 0.005
+    }
+
+    init(name: String, button: MouseButton, clickCount: Int, totalDuration: TimeInterval, hotkey: Hotkey, isEnabled: Bool = false, isUnlimited: Bool = false, id: UUID = UUID()) {
+        self.id = id
         self.name = name
         self.button = button
         self.clickCount = clickCount
         self.totalDuration = totalDuration
         self.hotkey = hotkey
         self.isEnabled = isEnabled
+        self.isUnlimited = isUnlimited
     }
 }
 

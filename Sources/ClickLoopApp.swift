@@ -1,15 +1,16 @@
 import SwiftUI
 import AppKit
+import QuartzCore
 
 @main
-struct SnapClickApp: App {
+struct ClickLoopApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(appDelegate.viewModel)
-                .frame(width: 251, height: 365)  // 宽度缩小15%
+                .frame(width: 310, height: 400)
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified(showsTitle: true))
@@ -17,7 +18,7 @@ struct SnapClickApp: App {
         .commands {
             CommandGroup(replacing: .newItem) {}
         }
-        .defaultSize(width: 251, height: 387)  // 相应调整默认大小
+        .defaultSize(width: 310, height: 422)
     }
 }
 
@@ -44,9 +45,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "hand.point.up.left.fill", accessibilityDescription: "SnapClick")
+            button.image = NSImage(systemSymbolName: "hand.point.up.left.fill", accessibilityDescription: "ClickLoop")
             button.action = #selector(togglePopover)
             button.target = self
+            button.toolTip = "ClickLoop"
+            if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                button.wantsLayer = true
+                let pulse = CABasicAnimation(keyPath: "opacity")
+                pulse.fromValue = 0.25
+                pulse.toValue = 1
+                pulse.duration = 0.35
+                pulse.autoreverses = true
+                pulse.repeatCount = 3
+                button.layer?.add(pulse, forKey: "launchPulse")
+            }
         }
     }
 
@@ -70,6 +82,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         self.popover = popover
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        viewModel.stopClicking()
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false // 关闭窗口不退出应用
     }
@@ -85,7 +101,7 @@ struct MenuBarView: View {
                 .font(.system(size: 32))
                 .foregroundColor(.blue)
 
-            Text("SnapClick")
+            Text("ClickLoop")
                 .font(.headline)
 
             // 显示运行状态
@@ -98,6 +114,12 @@ struct MenuBarView: View {
                 Text(L.disabled)
                     .font(.caption)
                     .foregroundColor(.secondary)
+            }
+
+            if viewModel.isClicking {
+                Button(L.stopClicking, action: viewModel.stopClicking)
+                    .tint(.red)
+                    .buttonStyle(.borderedProminent)
             }
 
             Divider()

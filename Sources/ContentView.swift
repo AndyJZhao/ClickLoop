@@ -35,6 +35,7 @@ struct ContentView: View {
         VStack(spacing: 0) {
             // 顶部栏：语言切换
             HStack {
+                LaunchIconView(size: 24)
                 Spacer()
                 Picker("", selection: Binding(
                     get: { localization.currentLanguage },
@@ -57,7 +58,8 @@ struct ContentView: View {
             mainPanel
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .navigationTitle("SnapClick")
+        .navigationTitle("ClickLoop")
+        .onChange(of: editorMode?.id) { _ in viewModel.stopClicking() }
         .sheet(item: $editorMode) { mode in
             switch mode {
             case .edit(let scheme):
@@ -104,6 +106,13 @@ struct ContentView: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 6)
                 .padding(.bottom, 6)
+            }
+
+            if viewModel.isClicking {
+                Button(L.stopClicking, action: viewModel.stopClicking)
+                    .tint(.red)
+                    .buttonStyle(.borderedProminent)
+                    .padding(.top, 8)
             }
 
             // 新增按钮 - 图标化（移到下面）
@@ -154,7 +163,7 @@ struct SchemeCard: View {
                             Image(systemName: scheme.button == .left ? "cursorarrow.click" : "cursorarrow.click.2")
                                 .font(.system(size: 11.8))
                                 .foregroundColor(.secondary)
-                            Text(L.clickDescription(
+                            Text(scheme.isUnlimited ? L.unlimitedDescription(cps: 1 / scheme.clickInterval) : L.clickDescription(
                                 button: scheme.button == .left ? L.leftButton : L.rightButton,
                                 count: scheme.clickCount,
                                 duration: String(format: "%.1f", scheme.totalDuration)
@@ -268,6 +277,7 @@ struct SchemeEditorSheet: View {
     @State private var button: MouseButton
     @State private var clickCount: String
     @State private var totalDuration: String
+    @State private var isUnlimited = false
     @State private var isRecordingHotkey = false
     @State private var recordedKeyCode: UInt16
     @State private var recordedCommand: Bool
@@ -286,6 +296,7 @@ struct SchemeEditorSheet: View {
         if let scheme = scheme {
             // 编辑现有方案 - 从方案数据初始化
             let currentScheme = scheme  // 创建局部副本
+            _isUnlimited = State(initialValue: currentScheme.isUnlimited)
             _name = State(initialValue: currentScheme.name)
             _button = State(initialValue: currentScheme.button)
             _clickCount = State(initialValue: String(currentScheme.clickCount))
@@ -313,11 +324,8 @@ struct SchemeEditorSheet: View {
         guard let count = Int(clickCount), let duration = Double(totalDuration) else {
             return false
         }
-        let cps = Double(count) / duration
-        return count > 0 &&  // 点击次数大于0
-               duration > 0 && duration <= 60 &&  // 最大60秒
-               cps <= 200 &&  // 最大200 CPS (Clicks Per Second)
-               recordedKeyCode != 0  // 必须设置快捷键
+        return ClickScheme.isValidTiming(clickCount: count, duration: duration) &&
+            recordedKeyCode != 0 && recordedKeyCode != 53
     }
 
     // 计算当前的CPS
@@ -392,6 +400,10 @@ struct SchemeEditorSheet: View {
                         .labelsHidden()
                     }
 
+                    Toggle(L.unlimited, isOn: $isUnlimited)
+                        .toggleStyle(.switch)
+                        .font(.system(size: 12))
+
                     // 点击次数和完成时长
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 5) {
@@ -399,27 +411,24 @@ struct SchemeEditorSheet: View {
                                 .font(.system(size: 10.7, weight: .medium))
                                 .foregroundColor(.secondary)
                             TextField("", text: $clickCount)
+                                .accessibilityLabel(L.clickCount)
                                 .textFieldStyle(.roundedBorder)
                         }
 
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(L.duration)
+                            Text(isUnlimited ? L.rateWindow : L.duration)
                                 .font(.system(size: 10.7, weight: .medium))
                                 .foregroundColor(.secondary)
                             TextField("", text: $totalDuration)
                                 .textFieldStyle(.roundedBorder)
-                                .onChange(of: totalDuration) { newValue in
-                                    if let duration = Double(newValue), duration > 60 {
-                                        totalDuration = "60"
-                                    }
-                                }
-                            if let duration = Double(totalDuration), duration > 60 {
-                                Text("(max 60s)")
-                                    .font(.system(size: 8.9))
-                                    .foregroundColor(.red)
-                            }
+                                .accessibilityLabel(isUnlimited ? L.rateWindow : L.duration)
                         }
                     }
+
+                    Text(isUnlimited ? L.unlimitedHelp : L.durationHelp)
+                        .font(.system(size: 11))
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     // CPS 提示
                     if currentCPS > 200 {
@@ -506,7 +515,7 @@ struct SchemeEditorSheet: View {
             .padding(.vertical, 12)
             .background(Color(nsColor: .controlBackgroundColor))
         }
-        .frame(width: 210, height: 331)  // 高度增加20%: 276 * 1.2 = 331
+        .frame(width: 300, height: 435)
         .onDisappear {
             stopHotkeyRecording()
         }
@@ -579,7 +588,8 @@ struct SchemeEditorSheet: View {
                 clickCount: count,
                 totalDuration: duration,
                 hotkey: hotkey,
-                isEnabled: false
+                isEnabled: false,
+                isUnlimited: isUnlimited
             )
             viewModel.addScheme(newScheme)
         } else if let oldScheme = scheme {
@@ -588,6 +598,7 @@ struct SchemeEditorSheet: View {
             updatedScheme.button = button
             updatedScheme.clickCount = count
             updatedScheme.totalDuration = duration
+            updatedScheme.isUnlimited = isUnlimited
             updatedScheme.hotkey = hotkey
             // ⚠️ 关键：保持 isEnabled 状态不变
             // updatedScheme.isEnabled 和 updatedScheme.name 已经从 oldScheme 继承
@@ -676,6 +687,10 @@ struct SchemeEditorSheet: View {
         // 监听按键事件
         let keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             if self.isRecordingHotkey {
+                if event.keyCode == 53 {
+                    self.stopHotkeyRecording()
+                    return nil
+                }
                 // 记录按键和修饰键
                 self.recordedKeyCode = event.keyCode
                 self.recordedCommand = event.modifierFlags.contains(.command)

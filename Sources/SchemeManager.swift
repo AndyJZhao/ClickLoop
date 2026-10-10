@@ -5,15 +5,15 @@ class SchemeManager {
     private var schemes: [ClickScheme] = []
     private let fileURL: URL
 
-    init() {
-        // 确定存储路径: ~/Library/Application Support/SnapClick/schemes.json
+    init(directoryURL: URL? = nil) {
+        // 确定存储路径: ~/Library/Application Support/ClickLoop/schemes.json
         let appSupportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let snapClickDir = appSupportURL.appendingPathComponent("SnapClick")
+        let clickLoopDir = directoryURL ?? appSupportURL.appendingPathComponent("ClickLoop")
 
         // 创建目录（如果不存在）
-        try? FileManager.default.createDirectory(at: snapClickDir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: clickLoopDir, withIntermediateDirectories: true)
 
-        fileURL = snapClickDir.appendingPathComponent("schemes.json")
+        fileURL = clickLoopDir.appendingPathComponent("schemes.json")
 
         // 加载现有方案
         loadSchemes()
@@ -163,6 +163,7 @@ private struct StorableScheme: Codable {
     let controlKey: Bool
     let shiftKey: Bool
     let isEnabled: Bool
+    let isUnlimited: Bool?
 
     init(from scheme: ClickScheme) {
         self.id = scheme.id.uuidString
@@ -176,6 +177,7 @@ private struct StorableScheme: Codable {
         self.controlKey = scheme.hotkey.modifierFlags.contains(.maskControl)
         self.shiftKey = scheme.hotkey.modifierFlags.contains(.maskShift)
         self.isEnabled = scheme.isEnabled
+        self.isUnlimited = scheme.isUnlimited
     }
 
     func toScheme() -> ClickScheme? {
@@ -188,20 +190,16 @@ private struct StorableScheme: Codable {
             shiftKey: shiftKey
         )
 
-        var scheme = ClickScheme(
+        let scheme = ClickScheme(
             name: name,
             button: button,
             clickCount: clickCount,
             totalDuration: totalDuration,
             hotkey: hotkey,
-            isEnabled: isEnabled
+            isEnabled: isEnabled,
+            isUnlimited: isUnlimited ?? false,
+            id: UUID(uuidString: id) ?? UUID()
         )
-
-        // 恢复原始 UUID（如果可能）
-        if let uuid = UUID(uuidString: id) {
-            // 使用反射或创建自定义初始化器来恢复 UUID
-            // 这里简化处理，使用现有的 UUID
-        }
 
         return scheme
     }

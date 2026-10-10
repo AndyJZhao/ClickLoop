@@ -1,9 +1,9 @@
 #!/bin/bash
 
-APP_NAME="SnapClick"
-VERSION="3.1"
+APP_NAME="ClickLoop"
+VERSION="1.0.0"
 DMG_NAME="${APP_NAME}_v${VERSION}.dmg"
-VOLUME_NAME="SnapClick"
+VOLUME_NAME="ClickLoop"
 
 echo "📦 正在创建 DMG 安装包..."
 
@@ -65,7 +65,7 @@ tell application "Finder"
         set background picture of viewOptions to file ".background:background.png"
 
         -- 设置图标位置 (y 坐标从 180 改为 160，图标上移)
-        -- SnapClick.app 在左侧 (150, 160)
+        -- ClickLoop.app 在左侧 (150, 160)
         set position of item "${APP_NAME}.app" of container window to {150, 160}
         -- Applications 快捷方式在右侧 (450, 160)
         set position of item "Applications" of container window to {450, 160}

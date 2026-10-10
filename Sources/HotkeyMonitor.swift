@@ -4,6 +4,7 @@ import AppKit
 
 /// 全局快捷键监听器
 class HotkeyMonitor {
+    var onEscape: (() -> Void)?
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var hotkeyHandlers: [Hotkey: () -> Void] = [:]
@@ -84,6 +85,10 @@ class HotkeyMonitor {
 
     /// 处理按键事件
     private func handleEvent(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent> {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            if let eventTap = eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
+            return Unmanaged.passUnretained(event)
+        }
         // 如果不是按键按下事件，直接传递
         guard type == .keyDown else {
             return Unmanaged.passUnretained(event)
@@ -91,6 +96,13 @@ class HotkeyMonitor {
 
         let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
         let flags = event.flags
+        if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 {
+            return Unmanaged.passUnretained(event)
+        }
+        if keyCode == 53 {
+            DispatchQueue.main.async { [weak self] in self?.onEscape?() }
+            return Unmanaged.passUnretained(event)
+        }
 
         // 构造当前按键信息
         let currentHotkey = Hotkey(

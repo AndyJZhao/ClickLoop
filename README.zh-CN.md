@@ -1,187 +1,45 @@
-# SnapClick
+# ClickLoop
 
-<div align="center">
+基于 [mmmelson/SnapClick](https://github.com/mmmelson/SnapClick) 迭代的 macOS 原生鼠标连点器，使用 SwiftUI / AppKit，支持 macOS 13 及以上。
 
-<img src="images/icon.png" alt="SnapClick Logo" width="128" height="128">
+[English](README.md)
 
-🖱️ **Mac上最简单易用的鼠标连点器**
+## 新增功能
 
-[![macOS](https://img.shields.io/badge/macOS-13.0+-blue.svg)](https://www.apple.com/macos/)
-[![Architecture](https://img.shields.io/badge/Apple_Silicon-arm64-green.svg)](https://support.apple.com/en-us/HT211814)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+- **更长时长**：解除 60 秒上限，可输入 600 秒、3600 秒等正数。
+- **无限连点**：打开“无限连点”，下方“点击次数 / 每隔（秒）”决定频率。例如 `10 / 1` 表示每秒 10 次，持续到手动停止。
+- **立即停止**：再次按相同快捷键、按 Esc，或点击主窗口 / 菜单栏面板的“停止连点”。禁用方案、编辑方案和退出应用也会停止正在执行的连点。
+- **启动图标动画**：主窗口图标短暂摆动，菜单栏图标短暂闪动；遵循系统“减少动态效果”设置。
 
-[English](README.md) | [中文](README.zh-CN.md)
+有限模式保留上游行为：立即执行第一次点击，后续间隔为“时长 / 次数”，达到次数后结束。最高频率仍为 200 CPS。点击跟随当前鼠标位置，实际频率受系统负载影响。
 
-</div>
+## 构建与使用
 
-## 下载
-点击[**下载**](https://github.com/mmmelson/SnapClick/releases/download/v3.1/SnapClick_v3.1.dmg)，即可开始！
+安装 Apple Xcode Command Line Tools 后运行：
 
-SnapClick太直观了，你不会需要任何介绍。
-
-<div align="center">
-
-<img src="images/image-1.png" alt="SnapClick 截图" width="30%">
-
-</div>
-
-### 首次使用说明
-
-当您首次打开 SnapClick 时，macOS 会显示安全提示（因为应用未上架 App Store）。请按以下步骤操作：
-
-<div align="center">
-
-<img src="images/notice1.png" alt="安全提示步骤1" width="45%">
-<img src="images/notice2.png" alt="安全提示步骤2" width="45%">
-
-</div>
-
-1. 点击第一个提示弹窗的**"完成"**按钮（不要移到废纸篓！）
-2. 前往**系统设置** → **隐私与安全性**
-3. 向下滚动，找到并点击**"仍要打开"**按钮
-4. SnapClick 现在可以成功启动了
-
-## 为什么做 SnapClick？
-
-最近偶然间惊喜地发现了网页版的《红色警戒2》，在Mac端也能玩，于是和童年记忆狠狠地链接了一波，很快就重新沉迷上这款当年的启蒙游戏。
-然而，组建一个坦克大军、快速重复点击同一个单位无数次，对于我这个只用触控板的玩家来说简直酸爽！😅
-
-我开始尝试市面上现成的一些连点器工具，但他们要么需要付费，要么不够好用。
-
-这就是SnapClick的由来，一个简单、稳定、够用的mac端鼠标连点器。
-
-## ✨ 特性
-
-- 🎯 **多方案管理** - 不同点击配置，自定义快捷键
-- ⚡ **全局快捷键** - 任何地方触发
-- 🖱️ **左右键支持** - 两个按键都支持
-- ⏱️ **精确控制** - 准确设置次数和时长
-- 📊 **后台运行** - 窗口关闭也能工作
-
-## ❓ 常见问题
-
-<details>
-<summary><b>系统要求是什么？</b></summary>
-
-- **操作系统**: macOS 13.0 (Ventura) 或更高
-- **处理器**: Apple Silicon (M1/M2/M3/M4)
-- **权限**: 辅助功能权限（用于全局快捷键和鼠标控制）
-
-</details>
-
-<details>
-<summary><b>无法打开应用？</b></summary>
-
-**macOS 会显示安全警告，因为本应用未经过公证。** 这对于没有 Apple Developer 会员资格的开源应用来说是正常现象。
-
-**方式 1：右键打开（推荐）**
-
-右键应用 → **打开** → **打开**（未签名应用需要一次）
-
-**方式 2：系统设置**
-
-打开 **系统设置** → **隐私与安全性** → 点击 **仍要打开**
-
-**方式 3：终端命令**
-```bash
-xattr -cr /Applications/SnapClick.app
-open /Applications/SnapClick.app
+```sh
+git clone https://github.com/AndyJZhao/ClickLoop.git
+cd ClickLoop
+./Scripts/build_app.sh --launch
 ```
 
-</details>
+生成适配当前 Mac 架构的 `ClickLoop.app`，使用本地 ad-hoc 签名，可复制到“应用程序”。启用方案前，需在“系统设置 → 隐私与安全性 → 辅助功能”中授权 **ClickLoop**。默认预设均关闭，快捷键为 ⌥1（左键）和 ⌥2（右键）。
 
-<details>
-<summary><b>如何授予辅助功能权限？</b></summary>
+ClickLoop 使用独立应用标识 `com.andyjzhao.clickloop`，预设存放在 `~/Library/Application Support/ClickLoop/schemes.json`，不会修改 SnapClick 数据。如需迁移，退出 ClickLoop 后，将 SnapClick 的 `schemes.json` 复制到该目录；旧格式预设按有限模式加载。
 
-打开 **系统设置** → **隐私与安全性** → **辅助功能** → 启用 SnapClick
+若出现 SDK 与 Swift 编译器版本不匹配，可在构建 / 测试命令前设置 `SDKROOT=/path/to/compatible/MacOSX.sdk`，选择本机已有的兼容 SDK，无需修改全局工具链。
 
-如已启用但不工作，尝试先关闭再重新打开。
+## 验证
 
-</details>
-
-<details>
-<summary><b>CPS 限制是多少？</b></summary>
-
-⚠️ **最大值：200 CPS**（每秒点击数）
-
-更高速率可能导致 macOS 崩溃，应用会阻止不安全的配置。
-
-**公式**: `CPS = 点击次数 ÷ 时长`
-
-**示例**:
-- ✅ 100 次点击 1 秒 = 100 CPS（安全）
-- ❌ 100 次点击 0.3 秒 = 333 CPS（已阻止）
-
-</details>
-
-<details>
-<summary><b>快捷键不响应？</b></summary>
-
-1. 检查是否已授予「辅助功能」权限
-2. 确认方案已启用（绿色 ✅）
-3. 检查是否与其他快捷键冲突
-4. 重启应用
-
-</details>
-
-<details>
-<summary><b>支持 Intel Mac 吗？</b></summary>
-
-当前仅支持 Apple Silicon。可从源码构建并自定义目标架构。
-
-</details>
-
-<details>
-<summary><b>如何从源码构建？</b></summary>
-
-```bash
-git clone https://github.com/mmmelson/SnapClick.git
-cd SnapClick
+```sh
+./Scripts/test.sh
 ./Scripts/build_app.sh
 ```
 
-</details>
+自动检查覆盖长时长、非法输入、频率上限、有限次数完成、无限执行、立即停止、替换正在执行的方案和新旧预设存储兼容性。测试使用内存点击计数器，**不会发出鼠标事件**。
 
-## 📋 更新日志
+手动验证：授权辅助功能后，设置无限模式为每秒 10 次，在无害目标上按快捷键，分别检查 Esc 和相同快捷键能停止。另检查 600 秒能保存并在重新打开编辑器后保留。
 
-### v3.1 - 2026-01-05 (最新版本)
-- 🐛 **修复关键bug**：应用重启后方案不再重复执行多次
-- ✨ **快捷键冲突检测**：应用现在可以防止重复快捷键并显示清晰的警告
-- 🎁 **默认方案**：首次使用的用户将获得两个预设方案（左键 ⌥1，右键 ⌥2）
-- 🧹 **代码清理**：移除调试日志以提升性能
-- 🏗️ **架构改进**：使用 `@EnvironmentObject` 确保单一 ViewModel 实例
+## 上游与许可证
 
-### v3.0 - 2025-12-28
-- 🎨 重新设计方案卡片交互：整个卡片可点击进入编辑
-- 🎯 将开关移至右侧并垂直居中
-- 🏷️ 在方案预览卡片中添加"快捷键"标签
-- ➕ 新增按钮添加"新建"文字标签和图标
-- 🔤 改进所有UI元素的字体一致性
-- 🐛 修复方案预览卡片中的文字溢出问题
-- 🐛 修复方案编辑器标题显示错误的问题
-- ✨ 优化整体布局间距和内边距
-
-### v2.0 - 2024-12-26
-- 🐛 修复更新方案时点击次数累加的问题
-- 🐛 修复快捷键触发时的应用崩溃问题
-- ✨ 增强全局快捷键在所有应用中的可靠性
-- 📦 添加带可视化引导的自定义 DMG 安装包
-
-### v1.0 - 2024-12-25
-- 🎉 首个版本发布
-
-## 📄 许可证
-
-MIT 许可证 - 详见 [LICENSE](LICENSE)
-
----
-
-<div align="center">
-
-**使用愉快！ 🎉**
-
-如果觉得有用，请给个 ⭐️ Star
-
-[问题反馈](https://github.com/mmmelson/SnapClick/issues) · [功能建议](https://github.com/mmmelson/SnapClick/discussions)
-
-</div>
+基于 SnapClick 提交 `b2e2dc97281d0baf1e53a7988c8ba10cbc265483`，保留源码历史、图标资源和原作者署名，采用 [MIT 许可证](LICENSE)。`images/` 内的旧截图属于上游应用。
