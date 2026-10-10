@@ -26,29 +26,32 @@ struct ClickScheme: Hashable, Identifiable, Codable {
     let id: UUID
     var name: String
     var button: MouseButton
-    var clickCount: Int
+    var targetCPS: Double
     var totalDuration: TimeInterval // 总完成时间（秒）
     var hotkey: Hotkey
     var isEnabled: Bool  // 方案启用状态
     var isUnlimited: Bool = false
 
-    /// 计算每次点击的间隔时间（秒）
-    var clickInterval: TimeInterval {
-        guard clickCount > 0 else { return 0 }
-        return totalDuration / Double(clickCount)
+    var clickInterval: TimeInterval { 1 / targetCPS }
+
+    // The first click is immediate; include each scheduled click before duration expires.
+    var clickCount: Int {
+        guard Self.isValidTiming(targetCPS: targetCPS, duration: totalDuration) else { return 0 }
+        return Int(ceil(targetCPS * totalDuration))
     }
 
-    static func isValidTiming(clickCount: Int, duration: TimeInterval) -> Bool {
-        let interval = duration / Double(clickCount)
-        return clickCount > 0 && duration.isFinite && duration > 0 &&
-            interval.isFinite && interval >= 0.005
+    static func isValidTiming(targetCPS: Double, duration: TimeInterval) -> Bool {
+        let count = targetCPS * duration
+        return targetCPS.isFinite && targetCPS > 0 && targetCPS <= 200 &&
+            (1 / targetCPS).isFinite && duration.isFinite && duration > 0 &&
+            count > 0 && count < Double(Int.max)
     }
 
-    init(name: String, button: MouseButton, clickCount: Int, totalDuration: TimeInterval, hotkey: Hotkey, isEnabled: Bool = false, isUnlimited: Bool = false, id: UUID = UUID()) {
+    init(name: String, button: MouseButton, targetCPS: Double, totalDuration: TimeInterval, hotkey: Hotkey, isEnabled: Bool = false, isUnlimited: Bool = false, id: UUID = UUID()) {
         self.id = id
         self.name = name
         self.button = button
-        self.clickCount = clickCount
+        self.targetCPS = targetCPS
         self.totalDuration = totalDuration
         self.hotkey = hotkey
         self.isEnabled = isEnabled

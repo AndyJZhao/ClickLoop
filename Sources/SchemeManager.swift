@@ -112,7 +112,7 @@ class SchemeManager {
         let defaultScheme1 = ClickScheme(
             name: "预设1",
             button: .left,
-            clickCount: 10,
+            targetCPS: 10,
             totalDuration: 1.0,
             hotkey: Hotkey(
                 keyCode: 18,  // 数字键1
@@ -128,7 +128,7 @@ class SchemeManager {
         let defaultScheme2 = ClickScheme(
             name: "预设2",
             button: .right,
-            clickCount: 10,
+            targetCPS: 10,
             totalDuration: 1.0,
             hotkey: Hotkey(
                 keyCode: 19,  // 数字键2
@@ -155,7 +155,8 @@ private struct StorableScheme: Codable {
     let id: String
     let name: String
     let buttonType: String
-    let clickCount: Int
+    let clickCount: Int?
+    let targetCPS: Double?
     let totalDuration: Double
     let keyCode: UInt16
     let commandKey: Bool
@@ -169,7 +170,8 @@ private struct StorableScheme: Codable {
         self.id = scheme.id.uuidString
         self.name = scheme.name
         self.buttonType = scheme.button == .left ? "left" : "right"
-        self.clickCount = scheme.clickCount
+        self.clickCount = nil
+        self.targetCPS = scheme.targetCPS
         self.totalDuration = scheme.totalDuration
         self.keyCode = scheme.hotkey.keyCode
         self.commandKey = scheme.hotkey.modifierFlags.contains(.maskCommand)
@@ -190,10 +192,12 @@ private struct StorableScheme: Codable {
             shiftKey: shiftKey
         )
 
+        // Older presets store a count and duration. Preserve their original frequency.
+        guard let cps = targetCPS ?? clickCount.map({ Double($0) / totalDuration }) else { return nil }
         let scheme = ClickScheme(
             name: name,
             button: button,
-            clickCount: clickCount,
+            targetCPS: cps,
             totalDuration: totalDuration,
             hotkey: hotkey,
             isEnabled: isEnabled,

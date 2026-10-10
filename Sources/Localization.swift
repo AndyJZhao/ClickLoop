@@ -47,10 +47,6 @@ struct L {
         LocalizationManager.shared.currentLanguage == .chinese ? "无限连点" : "Run indefinitely"
     }
 
-    static var rateWindow: String {
-        LocalizationManager.shared.currentLanguage == .chinese ? "每隔 (秒)" : "Every (sec)"
-    }
-
     static var durationHelp: String {
         LocalizationManager.shared.currentLanguage == .chinese ?
             "支持超过 60 秒。移动鼠标、Esc 或再次按快捷键可停止。" :
@@ -59,8 +55,8 @@ struct L {
 
     static var unlimitedHelp: String {
         LocalizationManager.shared.currentLanguage == .chinese ?
-            "按下方次数 / 秒数的频率持续点击。移动鼠标、Esc 或再次按快捷键停止。" :
-            "Keep clicking at the count / seconds rate below. Move the mouse, press Esc or the same hotkey to stop."
+            "按目标 CPS（每秒点击次数）持续点击。移动鼠标、Esc 或再次按快捷键停止。" :
+            "Keep clicking at Target CPS (clicks per second). Move the mouse, press Esc or the same hotkey to stop."
     }
 
     static var clicking: String {
@@ -110,12 +106,12 @@ struct L {
         LocalizationManager.shared.currentLanguage == .chinese ? "鼠标按键" : "Mouse Button"
     }
 
-    static var clickCount: String {
-        LocalizationManager.shared.currentLanguage == .chinese ? "点击次数" : "Click Count"
+    static var targetCPS: String {
+        LocalizationManager.shared.currentLanguage == .chinese ? "目标 CPS" : "Target CPS"
     }
 
     static var duration: String {
-        LocalizationManager.shared.currentLanguage == .chinese ? "完成时长 (秒)" : "Duration (sec)"
+        LocalizationManager.shared.currentLanguage == .chinese ? "持续时间 (秒)" : "Duration (sec)"
     }
 
     static var hotkey: String {
@@ -171,12 +167,6 @@ struct L {
         LocalizationManager.shared.currentLanguage == .chinese ?
             "CPS超过200可能导致崩溃！" :
             "CPS over 200 may cause crashes!"
-    }
-
-    static var currentCPS: String {
-        LocalizationManager.shared.currentLanguage == .chinese ?
-            "目标 CPS: %.4g" :
-            "Target CPS: %.4g"
     }
 
     // 提示信息
@@ -260,11 +250,11 @@ struct L {
     }
 
     // 点击描述
-    static func clickDescription(button: String, count: Int, duration: String) -> String {
+    static func clickDescription(button: String, cps: Double, duration: String) -> String {
         if LocalizationManager.shared.currentLanguage == .chinese {
-            return "\(button) \(count)次 \(duration)秒"
+            return "\(button) \(String(format: "%.4g", cps)) CPS · \(duration)秒"
         } else {
-            return "\(button) \(count)x \(duration)s"
+            return "\(button) \(String(format: "%.4g", cps)) CPS · \(duration)s"
         }
     }
 

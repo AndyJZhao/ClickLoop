@@ -7,14 +7,15 @@ A small native macOS auto-clicker, forked from [mmmelson/SnapClick](https://gith
 ## What's new
 
 - **Long durations:** enter positive durations beyond 60 seconds, including minutes or hours (in seconds).
-- **Unlimited clicking:** turn on **Run indefinitely**. Click Count and Every (sec) set the rate: `10 / 1` means 10 clicks per second, continuously until stopped.
+- **Target CPS:** enter clicks per second directly (up to 200, decimals supported). Changing Duration does not change the rate. Existing count/duration presets retain their original rate.
+- **Unlimited clicking:** turn on **Run indefinitely** to keep clicking at Target CPS until stopped; no duration is needed.
 - **Reliable hotkeys:** the window shows whether monitoring is ready or permission is missing. Granting Accessibility recovers automatically. Matched shortcuts are consumed so the foreground app does not also act on them.
 - **Accurate scheduling:** clicks run on a dedicated serial timer with App Nap protection during execution; click events do not inherit shortcut modifiers.
 - **Clicking indicator:** the menu bar shows a green click icon and **Clicking** while a preset is executing, then returns to its idle icon.
 - **Immediate stop:** move the mouse (including dragging), press the same preset hotkey again, press **Esc**, or use **Stop clicking** in the main window or menu-bar popover. Disabling presets, editing a preset, and quitting also stop active clicks.
 - **Launch animation:** the app icon animates in the window header and the menu-bar icon pulses briefly at launch. Reduce Motion is respected.
 
-Finite mode keeps SnapClick's count/rate convention: the first click happens immediately, subsequent clicks are spaced by `duration / count`, and execution ends at the requested count. The maximum rate remains 200 CPS. Keep the pointer stationary over the target while clicking; timing is best effort under system load.
+In finite mode, the first click happens immediately and subsequent clicks are spaced by `1 / Target CPS`. The click count is `ceil(Target CPS × Duration)`, including each scheduled click before the duration ends. The maximum rate remains 200 CPS. Keep the pointer stationary over the target while clicking; timing is best effort under system load.
 
 ## Build and run
 
@@ -39,9 +40,9 @@ If Swift reports an SDK/compiler version mismatch, select an installed SDK compa
 ./Scripts/build_app.sh
 ```
 
-Smoke checks cover long durations, invalid input and rate limits, finite completion, unlimited repetition, immediate cancellation, replacing a running preset, and new/legacy preset persistence. They inject a click sink and **never send mouse events**. For a manual end-to-end check, grant Accessibility, set a preset to 10 clicks / 1 second with Run indefinitely enabled, move over a harmless target, and press its hotkey. Verify that the menu bar shows **Clicking**; moving the mouse stops clicks and restores the idle icon. Restart and verify that Esc and the same hotkey also stop it. Also verify that 600 seconds saves and survives reopening the editor.
+Smoke checks cover long durations, invalid input and rate limits, finite completion, unlimited repetition, immediate cancellation, replacing a running preset, and new/legacy preset persistence. They inject a click sink and **never send mouse events**. For a manual end-to-end check, grant Accessibility, set Target CPS to 10 with Run indefinitely enabled, move over a harmless target, and press its hotkey. Verify that the menu bar shows **Clicking**; moving the mouse stops clicks and restores the idle icon. Restart and verify that Esc and the same hotkey also stop it. Also verify that 600 seconds saves and survives reopening the editor.
 
-`Tests/ClickTarget.html` is a harmless browser counter for end-to-end testing: open it in a browser, place the pointer in the blue area, reload to reset the counter, and trigger a 100-click / 1-second preset. Expect 100 mouse-down/up pairs, 100 click events, about 100 CPS, and zero modified clicks. The last-burst counter excludes manual clicks separated by more than one second. A physical-keyboard check on 2026-10-11 delivered all 100 clicks at 97.17 CPS in Chrome, with no shortcut modifiers; the internal timing check measured 100.00 CPS. The internal tests also measure 100 CPS while blocking the main thread and check hotkey consumption, held-key suppression, Esc routing, and immediate movement/drag cancellation in finite and unlimited modes.
+`Tests/ClickTarget.html` is a harmless browser counter for end-to-end testing: open it in a browser, place the pointer in the blue area, reload to reset the counter, and trigger a 100-CPS / 1-second preset. Expect 100 mouse-down/up pairs, 100 click events, about 100 CPS, and zero modified clicks. The last-burst counter excludes manual clicks separated by more than one second. A physical-keyboard check on 2026-10-11 delivered all 100 clicks at 97.17 CPS in Chrome, with no shortcut modifiers; the internal timing check measured 100.00 CPS. The internal tests also measure 100 CPS while blocking the main thread and check hotkey consumption, held-key suppression, Esc routing, and immediate movement/drag cancellation in finite and unlimited modes.
 
 Local ad-hoc builds have a new code signature after rebuilding. macOS may require removing/re-adding ClickLoop in Accessibility even if the old entry still appears enabled. The app reports its actual authorization and listener state.
 

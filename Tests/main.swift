@@ -11,21 +11,30 @@ func runLoop(_ seconds: TimeInterval) {
 }
 
 func scheme(count: Int = 3, duration: Double = 0.06, unlimited: Bool = false,
-            button: MouseButton = .left) -> ClickScheme {
-    ClickScheme(name: "Test", button: button, clickCount: count,
+            button: MouseButton = .left, cps: Double? = nil) -> ClickScheme {
+    ClickScheme(name: "Test", button: button, targetCPS: cps ?? Double(count) / duration,
                 totalDuration: duration, hotkey: Hotkey(keyCode: 18, optionKey: true),
                 isUnlimited: unlimited)
 }
 
-check(ClickScheme.isValidTiming(clickCount: 10, duration: 600), "600-second duration accepted")
-check(ClickScheme.isValidTiming(clickCount: 10, duration: 86400), "24-hour duration accepted")
-check(ClickScheme.isValidTiming(clickCount: 200, duration: 1), "200 CPS accepted")
-for duration in [0.0, -1.0, Double.nan, Double.infinity, 0.001] {
-    check(!ClickScheme.isValidTiming(clickCount: 1, duration: duration), "invalid duration rejected: \(duration)")
+check(ClickScheme.isValidTiming(targetCPS: 10, duration: 600), "600-second duration accepted")
+check(ClickScheme.isValidTiming(targetCPS: 10, duration: 86400), "24-hour duration accepted")
+check(ClickScheme.isValidTiming(targetCPS: 200, duration: 1), "200 CPS accepted")
+for duration in [0.0, -1.0, Double.nan, Double.infinity, Double.greatestFiniteMagnitude] {
+    check(!ClickScheme.isValidTiming(targetCPS: 10, duration: duration), "invalid duration rejected: \(duration)")
 }
-check(!ClickScheme.isValidTiming(clickCount: 201, duration: 1), "over 200 CPS rejected")
-check(!ClickScheme.isValidTiming(clickCount: 0, duration: 1), "zero count rejected")
+for cps in [0.0, -1.0, 201, Double.nan, Double.infinity, Double.leastNonzeroMagnitude] {
+    check(!ClickScheme.isValidTiming(targetCPS: cps, duration: 1), "invalid CPS rejected: \(cps)")
+}
 check(scheme(count: 1, duration: 5, unlimited: true).clickInterval == 5, "one-click infinite rate preserved")
+let shortPreset = scheme(duration: 1, cps: 100)
+let longPreset = scheme(duration: 10, cps: 100)
+check(shortPreset.clickInterval == 0.01 && longPreset.clickInterval == 0.01,
+      "changing duration keeps target CPS unchanged")
+check(shortPreset.clickCount == 100 && longPreset.clickCount == 1000,
+      "finite count is calculated from target CPS and duration")
+check(scheme(duration: 1, cps: 2.5).clickInterval == 0.4 &&
+      scheme(duration: 1, cps: 2.5).clickCount == 3, "fractional CPS is not rounded to an integer rate")
 
 // Substitute an in-memory sink: these tests never send mouse events or need Accessibility.
 final class ClickLog {
@@ -83,21 +92,32 @@ let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UU
 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 defer { try? FileManager.default.removeItem(at: directory) }
 let storage = SchemeManager(directoryURL: directory)
-let saved = scheme(count: 10, duration: 600, unlimited: true)
+let saved = scheme(duration: 600, unlimited: true, cps: 2.5)
 _ = storage.addScheme(saved)
 let reloaded = SchemeManager(directoryURL: directory).getAllSchemes()
-check(reloaded.contains(saved), "unlimited mode, duration and UUID survive persistence")
+check(reloaded.contains(saved), "target CPS, unlimited mode, duration and UUID survive persistence")
 
 // Older SnapClick-format records have no isUnlimited property.
 let path = directory.appendingPathComponent("schemes.json")
 var records = try JSONSerialization.jsonObject(with: Data(contentsOf: path)) as! [[String: Any]]
-for index in records.indices { records[index].removeValue(forKey: "isUnlimited") }
+for index in records.indices {
+    records[index].removeValue(forKey: "isUnlimited")
+    records[index].removeValue(forKey: "targetCPS")
+    records[index]["clickCount"] = 100
+    records[index]["totalDuration"] = 10.0
+}
 try JSONSerialization.data(withJSONObject: records).write(to: path)
 let legacy = SchemeManager(directoryURL: directory).getAllSchemes()
 check(legacy.count == records.count && legacy.allSatisfy { !$0.isUnlimited }, "legacy presets decode as finite")
+check(legacy.allSatisfy { $0.targetCPS == 10 && $0.clickInterval == 0.1 },
+      "legacy 100 clicks / 10 seconds migrates to 10 CPS")
+let migratedStorage = SchemeManager(directoryURL: directory)
+_ = migratedStorage.updateScheme(at: 0, with: legacy[0])
+check(SchemeManager(directoryURL: directory).getAllSchemes() == legacy,
+      "migrated presets survive save and reload without changing IDs or rates")
 // Timing must stay accurate even while the UI thread is occupied.
 log.reset()
-clicker.executeScheme(scheme(count: 100, duration: 1))
+clicker.executeScheme(scheme(duration: 1, cps: 100))
 Thread.sleep(forTimeInterval: 0.2)
 check(events.count >= 15, "clicks continue while the main thread is blocked")
 runLoop(1.0)

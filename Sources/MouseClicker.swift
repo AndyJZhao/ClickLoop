@@ -21,7 +21,7 @@ class MouseClicker {
 
     func executeScheme(_ scheme: ClickScheme) {
         stop()
-        guard ClickScheme.isValidTiming(clickCount: scheme.clickCount,
+        guard ClickScheme.isValidTiming(targetCPS: scheme.targetCPS,
                                         duration: scheme.totalDuration) else { return }
         let runID = UUID()
         self.runID = runID
