@@ -6,6 +6,7 @@ class ClickerViewModel: ObservableObject {
     @Published var schemes: [ClickScheme] = []
     @Published var isRunning: Bool = false
     @Published var isClicking: Bool = false
+    @Published var actualCPS: Double = 0
     @Published var needsAccessibilityPermission = false
     @Published var monitoringFailed = false
     private var monitoringPaused = false
@@ -17,6 +18,7 @@ class ClickerViewModel: ObservableObject {
 
     init() {
         mouseClicker.onRunningChanged = { [weak self] running in self?.isClicking = running }
+        mouseClicker.onActualCPSChanged = { [weak self] cps in self?.actualCPS = cps }
         hotkeyMonitor.onEscape = { [weak self] in self?.stopClicking() }
         hotkeyMonitor.onMouseMovement = { [weak self] in self?.stopClicking() }
         hotkeyMonitor.isClicking = { [weak self] in self?.isClicking == true }

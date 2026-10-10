@@ -25,6 +25,8 @@ struct ClickLoopApp: App {
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var clickingObservation: AnyCancellable?
+    private var cpsObservation: AnyCancellable?
+    private let cpsOverlay = CPSOverlayController()
     var statusItem: NSStatusItem?
     var popover: NSPopover?
     // ⚠️ 关键：在 AppDelegate 中持有 ViewModel，确保窗口关闭后仍然运行
@@ -44,6 +46,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         clickingObservation = viewModel.$isClicking
             .removeDuplicates()
             .sink { [weak self] in self?.updateClickingIndicator($0) }
+        cpsObservation = viewModel.$actualCPS
+            .sink { [weak self] in self?.cpsOverlay.update($0) }
     }
 
     func setupMenuBarIcon() {
@@ -68,6 +72,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateClickingIndicator(_ isClicking: Bool) {
+        if isClicking { cpsOverlay.show() } else { cpsOverlay.hide() }
         guard let statusItem = statusItem, let button = statusItem.button else { return }
         statusItem.length = isClicking ? NSStatusItem.variableLength : NSStatusItem.squareLength
         button.image = NSImage(systemSymbolName: isClicking ? "cursorarrow.click" : "hand.point.up.left.fill",
@@ -148,7 +153,7 @@ struct MenuBarView: View {
 
             Button(L.showMainWindow) {
                 NSApplication.shared.activate(ignoringOtherApps: true)
-                NSApplication.shared.windows.first?.makeKeyAndOrderFront(nil)
+                NSApplication.shared.windows.first(where: { $0.canBecomeMain })?.makeKeyAndOrderFront(nil)
             }
             .buttonStyle(.borderedProminent)
 

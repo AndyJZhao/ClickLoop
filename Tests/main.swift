@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import AppKit
 
 func check(_ condition: @autoclosure () -> Bool, _ message: String) {
     precondition(condition(), message)
@@ -36,6 +37,30 @@ check(shortPreset.clickCount == 100 && longPreset.clickCount == 1000,
 check(scheme(duration: 1, cps: 2.5).clickInterval == 0.4 &&
       scheme(duration: 1, cps: 2.5).clickCount == 3, "fractional CPS is not rounded to an integer rate")
 
+var meter = ClickRateMeter()
+check(meter.rate(at: 10) == 0, "empty measurement reports zero")
+meter.record(at: 10)
+check(meter.rate(at: 10) == 0, "first click does not invent an elapsed rate")
+for index in 1...100 { meter.record(at: 10 + Double(index) / 100) }
+check(abs(meter.rate(at: 11) - 100) < 0.01, "Actual CPS counts the trailing second")
+check(abs(meter.rate(at: 11.5) - 50) < 0.01, "Actual CPS falls when clicking stalls")
+check(meter.rate(at: 12.1) == 0, "old clicks expire from Actual CPS")
+meter = ClickRateMeter()
+meter.record(at: 20)
+meter.record(at: 20.4)
+check(abs(meter.rate(at: 20.4) - 2.5) < 0.001, "warm-up measures fractional rates")
+
+for bounds in [NSRect(x: 0, y: 0, width: 1440, height: 900),
+               NSRect(x: -1920, y: -300, width: 1920, height: 1080)] {
+    for pointer in [NSPoint(x: bounds.minX + 1, y: bounds.minY + 1),
+                    NSPoint(x: bounds.maxX - 1, y: bounds.maxY - 1),
+                    NSPoint(x: bounds.midX, y: bounds.midY)] {
+        let frame = CPSOverlayController.frame(near: pointer, within: bounds)
+        check(bounds.contains(frame) && !frame.contains(pointer),
+              "overlay stays on its display and away from the pointer")
+    }
+}
+
 // Substitute an in-memory sink: these tests never send mouse events or need Accessibility.
 final class ClickLog {
     private let lock = NSLock()
@@ -53,7 +78,7 @@ final class ClickLog {
 let log = ClickLog()
 var events: [MouseButton] { log.snapshot.map { $0.0 } }
 var running = false
-let clicker = MouseClicker(clickAction: { log.append($0) }, startSound: {})
+let clicker = MouseClicker(clickAction: { log.append($0); return true }, startSound: {})
 clicker.onRunningChanged = { running = $0 }
 clicker.executeScheme(scheme())
 runLoop(0.15)
@@ -193,4 +218,30 @@ for type in [CGEventType.leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMou
 }
 check(running, "ordinary click events do not stop clicking")
 clicker.stop()
+
+// A deliberately slower click sink must lower Actual CPS without changing Target CPS.
+var measuredRates: [Double] = []
+let slowClicker = MouseClicker(clickAction: { _ in
+    Thread.sleep(forTimeInterval: 0.025)
+    return true
+}, startSound: {})
+slowClicker.onActualCPSChanged = { measuredRates.append($0) }
+slowClicker.executeScheme(scheme(duration: 1, unlimited: true, cps: 100))
+runLoop(1.3)
+check(measuredRates.last! > 0 && measuredRates.last! < 80,
+      "Actual CPS reflects a slow click sink instead of echoing Target CPS: \(measuredRates)")
+slowClicker.stop()
+check(measuredRates.last == 0, "stop resets Actual CPS")
+let readingsAfterStop = measuredRates.count
+runLoop(0.15)
+check(measuredRates.count == readingsAfterStop, "stop cancels live CPS updates")
+
+let failedClicker = MouseClicker(clickAction: { _ in false }, startSound: {})
+var failedRates: [Double] = []
+failedClicker.onActualCPSChanged = { failedRates.append($0) }
+failedClicker.executeScheme(scheme(duration: 1, unlimited: true, cps: 100))
+runLoop(0.25)
+check(failedRates.count >= 2 && failedRates.allSatisfy { $0 == 0 },
+      "failed click submissions do not inflate Actual CPS")
+failedClicker.stop()
 print("All ClickLoop smoke checks passed; no mouse events were posted.")

@@ -11,6 +11,7 @@ A small native macOS auto-clicker, forked from [mmmelson/SnapClick](https://gith
 - **Unlimited clicking:** turn on **Run indefinitely** to keep clicking at Target CPS until stopped; no duration is needed.
 - **Reliable hotkeys:** the window shows whether monitoring is ready or permission is missing. Granting Accessibility recovers automatically. Matched shortcuts are consumed so the foreground app does not also act on them.
 - **Accurate scheduling:** clicks run on a dedicated serial timer with App Nap protection during execution; click events do not inherit shortcut modifiers.
+- **Actual CPS overlay:** while clicking, a small click-through panel beside the pointer shows the measured rate, refreshed every 0.1 seconds over a trailing one-second window (elapsed intervals during startup). It stays within the current display and hides when clicking stops. This counts clicks posted by ClickLoop; receiving apps may process fewer events.
 - **Clicking indicator:** the menu bar shows a green click icon and **Clicking** while a preset is executing, then returns to its idle icon.
 - **Immediate stop:** move the mouse (including dragging), press the same preset hotkey again, press **Esc**, or use **Stop clicking** in the main window or menu-bar popover. Disabling presets, editing a preset, and quitting also stop active clicks.
 - **Launch animation:** the app icon animates in the window header and the menu-bar icon pulses briefly at launch. Reduce Motion is respected.
@@ -38,6 +39,8 @@ If Swift reports an SDK/compiler version mismatch, select an installed SDK compa
 ```sh
 ./Scripts/test.sh
 ./Scripts/build_app.sh
+# Optional visual check: shows the real overlay with an in-memory click sink for 40 seconds.
+./Scripts/preview_overlay.sh
 ```
 
 Smoke checks cover long durations, invalid input and rate limits, finite completion, unlimited repetition, immediate cancellation, replacing a running preset, and new/legacy preset persistence. They inject a click sink and **never send mouse events**. For a manual end-to-end check, grant Accessibility, set Target CPS to 10 with Run indefinitely enabled, move over a harmless target, and press its hotkey. Verify that the menu bar shows **Clicking**; moving the mouse stops clicks and restores the idle icon. Restart and verify that Esc and the same hotkey also stop it. Also verify that 600 seconds saves and survives reopening the editor.

@@ -38,6 +38,8 @@ swiftc \
     Sources/ClickScheme.swift \
     Sources/HotkeyMonitor.swift \
     Sources/MouseClicker.swift \
+    Sources/ClickRateMeter.swift \
+    Sources/CPSOverlayController.swift \
     Sources/SchemeManager.swift \
     Sources/Localization.swift \
     Sources/ViewModels/ClickerViewModel.swift \

@@ -8,12 +8,15 @@ class MouseClicker {
     private var timer: DispatchSourceTimer?
     private var runID: UUID?
     private var activity: NSObjectProtocol?
+    private var rateMeter = ClickRateMeter()
+    private var statsTimer: Timer?
     private(set) var activeSchemeID: UUID?
     var onRunningChanged: ((Bool) -> Void)?
-    private let clickAction: (MouseButton) -> Void
+    var onActualCPSChanged: ((Double) -> Void)?
+    private let clickAction: (MouseButton) -> Bool
     private let startSound: () -> Void
 
-    init(clickAction: @escaping (MouseButton) -> Void = MouseClicker.simulateClick,
+    init(clickAction: @escaping (MouseButton) -> Bool = MouseClicker.simulateClick,
          startSound: @escaping () -> Void = { NSSound(named: "Tink")?.play() }) {
         self.clickAction = clickAction
         self.startSound = startSound
@@ -33,11 +36,14 @@ class MouseClicker {
         startSound()
         let clickAction = self.clickAction
         queue.sync {
+            rateMeter = ClickRateMeter()
             let timer = DispatchSource.makeTimerSource(flags: .strict, queue: queue)
             var remaining = scheme.clickCount
             timer.schedule(deadline: .now(), repeating: scheme.clickInterval, leeway: .nanoseconds(0))
             timer.setEventHandler { [weak self] in
-                clickAction(scheme.button)
+                if clickAction(scheme.button) {
+                    self?.rateMeter.record(at: ProcessInfo.processInfo.systemUptime)
+                }
                 if !scheme.isUnlimited {
                     remaining -= 1
                     if remaining == 0 {
@@ -52,9 +58,20 @@ class MouseClicker {
             self.timer = timer
             timer.resume()
         }
+        let statsTimer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            let cps = self.queue.sync {
+                self.rateMeter.rate(at: ProcessInfo.processInfo.systemUptime)
+            }
+            self.onActualCPSChanged?(cps)
+        }
+        self.statsTimer = statsTimer
+        RunLoop.main.add(statsTimer, forMode: .common)
     }
 
     func stop() {
+        statsTimer?.invalidate()
+        statsTimer = nil
         // Wait only for an in-flight down/up pair, never for the next click interval.
         queue.sync {
             timer?.cancel()
@@ -64,10 +81,12 @@ class MouseClicker {
         activeSchemeID = nil
         if let activity = activity { ProcessInfo.processInfo.endActivity(activity) }
         activity = nil
+        onActualCPSChanged?(0)
         onRunningChanged?(false)
     }
 
     deinit {
+        statsTimer?.invalidate()
         timer?.cancel()
         if let activity = activity { ProcessInfo.processInfo.endActivity(activity) }
     }
@@ -90,11 +109,12 @@ class MouseClicker {
         return (down, up)
     }
 
-    static func simulateClick(button: MouseButton) {
+    static func simulateClick(button: MouseButton) -> Bool {
         guard let location = CGEvent(source: nil)?.location,
-              let (down, up) = clickEvents(button: button, at: location) else { return }
+              let (down, up) = clickEvents(button: button, at: location) else { return false }
         down.post(tap: .cghidEventTap)
         Thread.sleep(forTimeInterval: 0.001)
         up.post(tap: .cghidEventTap)
+        return true
     }
 }
