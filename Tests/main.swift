@@ -143,4 +143,34 @@ _ = monitor.handleEvent(type: .keyUp, event: escape)
 monitor.isClicking = { false }
 check(monitor.handleEvent(type: .keyDown, event: escape) != nil, "idle Esc passes through")
 check(Hotkey.keyA != Hotkey.unassignedKey, "A is a valid key, not the unassigned sentinel")
+// Feed movement directly through the event handler without posting any system input.
+var movementStops = 0
+monitor.isClicking = { running }
+monitor.onMouseMovement = { movementStops += 1; clicker.stop() }
+let move = CGEvent(mouseEventSource: nil, mouseType: .mouseMoved,
+                   mouseCursorPosition: CGPoint(x: 20, y: 20), mouseButton: .left)!
+_ = monitor.handleEvent(type: .mouseMoved, event: move)
+check(movementStops == 0, "idle movement does not invoke stop")
+for unlimited in [false, true] {
+    for type in [CGEventType.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged] {
+        log.reset()
+        clicker.executeScheme(scheme(count: 100, duration: 1, unlimited: unlimited))
+        runLoop(0.03)
+        check(running && !events.isEmpty, "run starts before movement")
+        let stopsBefore = movementStops
+        let forwarded = monitor.handleEvent(type: type, event: move)
+        check(forwarded?.takeUnretainedValue() === move, "movement passes through to target app")
+        check(!running && clicker.activeSchemeID == nil && movementStops == stopsBefore + 1,
+              "movement \(type.rawValue) immediately clears active state (unlimited: \(unlimited))")
+        let countAfterMovement = events.count
+        runLoop(0.04)
+        check(events.count == countAfterMovement, "no clicks follow movement stop")
+    }
+}
+clicker.executeScheme(scheme(count: 1, duration: 0.02, unlimited: true))
+for type in [CGEventType.leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp] {
+    _ = monitor.handleEvent(type: type, event: move)
+}
+check(running, "ordinary click events do not stop clicking")
+clicker.stop()
 print("All ClickLoop smoke checks passed; no mouse events were posted.")

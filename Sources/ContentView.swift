@@ -65,10 +65,18 @@ struct ContentView: View {
                 Button(L.retryHotkeys, action: viewModel.startClicker)
                     .padding(10)
             } else if viewModel.isRunning {
-                Text(viewModel.isClicking ? L.running : L.hotkeysReady)
-                    .font(.caption)
-                    .foregroundColor(.green)
-                    .padding(.top, 6)
+                if viewModel.isClicking {
+                    Label(L.clicking, systemImage: "cursorarrow.click")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                        .padding(.top, 6)
+                        .help(L.moveToStop)
+                } else {
+                    Text(L.hotkeysReady)
+                        .font(.caption)
+                        .foregroundColor(.green)
+                        .padding(.top, 6)
+                }
             }
 
             // 主内容区：只显示方案列表

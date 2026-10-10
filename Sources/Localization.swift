@@ -53,14 +53,22 @@ struct L {
 
     static var durationHelp: String {
         LocalizationManager.shared.currentLanguage == .chinese ?
-            "支持超过 60 秒。Esc 或再次按快捷键可停止。" :
-            "Durations over 60 seconds are supported. Esc or the same hotkey stops clicking."
+            "支持超过 60 秒。移动鼠标、Esc 或再次按快捷键可停止。" :
+            "Durations over 60 seconds are supported. Move the mouse, press Esc or the same hotkey to stop."
     }
 
     static var unlimitedHelp: String {
         LocalizationManager.shared.currentLanguage == .chinese ?
-            "按下方次数 / 秒数的频率持续点击。Esc 或再次按快捷键停止。" :
-            "Keep clicking at the count / seconds rate below. Esc or the same hotkey stops clicking."
+            "按下方次数 / 秒数的频率持续点击。移动鼠标、Esc 或再次按快捷键停止。" :
+            "Keep clicking at the count / seconds rate below. Move the mouse, press Esc or the same hotkey to stop."
+    }
+
+    static var clicking: String {
+        LocalizationManager.shared.currentLanguage == .chinese ? "连点中" : "Clicking"
+    }
+
+    static var moveToStop: String {
+        LocalizationManager.shared.currentLanguage == .chinese ? "移动鼠标即可停止" : "Move the mouse to stop"
     }
 
     static var stopClicking: String {

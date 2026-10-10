@@ -18,6 +18,7 @@ class ClickerViewModel: ObservableObject {
     init() {
         mouseClicker.onRunningChanged = { [weak self] running in self?.isClicking = running }
         hotkeyMonitor.onEscape = { [weak self] in self?.stopClicking() }
+        hotkeyMonitor.onMouseMovement = { [weak self] in self?.stopClicking() }
         hotkeyMonitor.isClicking = { [weak self] in self?.isClicking == true }
         loadSchemes()
 

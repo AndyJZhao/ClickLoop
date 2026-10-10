@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import QuartzCore
+import Combine
 
 @main
 struct ClickLoopApp: App {
@@ -23,6 +24,7 @@ struct ClickLoopApp: App {
 }
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    private var clickingObservation: AnyCancellable?
     var statusItem: NSStatusItem?
     var popover: NSPopover?
     // ⚠️ 关键：在 AppDelegate 中持有 ViewModel，确保窗口关闭后仍然运行
@@ -39,6 +41,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // 强制初始化 viewModel
         _ = viewModel
         setupMenuBarIcon()
+        clickingObservation = viewModel.$isClicking
+            .removeDuplicates()
+            .sink { [weak self] in self?.updateClickingIndicator($0) }
     }
 
     func setupMenuBarIcon() {
@@ -60,6 +65,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 button.layer?.add(pulse, forKey: "launchPulse")
             }
         }
+    }
+
+    private func updateClickingIndicator(_ isClicking: Bool) {
+        guard let statusItem = statusItem, let button = statusItem.button else { return }
+        statusItem.length = isClicking ? NSStatusItem.variableLength : NSStatusItem.squareLength
+        button.image = NSImage(systemSymbolName: isClicking ? "cursorarrow.click" : "hand.point.up.left.fill",
+                               accessibilityDescription: isClicking ? "Clicking" : "ClickLoop")
+        button.title = isClicking ? " Clicking" : ""
+        button.contentTintColor = isClicking ? .systemGreen : nil
+        button.toolTip = isClicking ? "ClickLoop — Clicking · \(L.moveToStop)" : "ClickLoop"
+        button.setAccessibilityLabel(isClicking ? "ClickLoop — Clicking" : "ClickLoop")
     }
 
     @objc func togglePopover() {
@@ -105,7 +121,13 @@ struct MenuBarView: View {
                 .font(.headline)
 
             // 显示运行状态
-            if viewModel.isRunning {
+            if viewModel.isClicking {
+                Label(L.clicking, systemImage: "cursorarrow.click")
+                    .foregroundColor(.green)
+                Text(L.moveToStop)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } else if viewModel.isRunning {
                 let enabledCount = viewModel.schemes.filter { $0.isEnabled }.count
                 Text(L.runningStatus(count: enabledCount))
                     .font(.caption)

@@ -4,6 +4,7 @@ import AppKit
 
 class HotkeyMonitor {
     var onEscape: (() -> Void)?
+    var onMouseMovement: (() -> Void)?
     var isClicking: (() -> Bool)?
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -19,7 +20,9 @@ class HotkeyMonitor {
     func startMonitoring() -> Bool {
         if let eventTap = eventTap { return CGEvent.tapIsEnabled(tap: eventTap) }
         guard AXIsProcessTrusted() else { return false }
-        let eventMask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
+        let eventTypes: [CGEventType] = [.keyDown, .keyUp, .mouseMoved,
+                                       .leftMouseDragged, .rightMouseDragged, .otherMouseDragged]
+        let eventMask = eventTypes.reduce(CGEventMask(0)) { $0 | (1 << $1.rawValue) }
         let callback: CGEventTapCallBack = { _, type, event, refcon in
             guard let refcon = refcon else { return Unmanaged.passUnretained(event) }
             let monitor = Unmanaged<HotkeyMonitor>.fromOpaque(refcon).takeUnretainedValue()
@@ -56,6 +59,12 @@ class HotkeyMonitor {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             pressedKeys.removeAll()
             if let eventTap = eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
+            return Unmanaged.passUnretained(event)
+        }
+        if type == .mouseMoved || type == .leftMouseDragged ||
+            type == .rightMouseDragged || type == .otherMouseDragged {
+            // The tap runs on the main run loop. Stop before passing movement to the target app.
+            if isClicking?() == true { onMouseMovement?() }
             return Unmanaged.passUnretained(event)
         }
         let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
