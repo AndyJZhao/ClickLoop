@@ -2,140 +2,84 @@ import Foundation
 import CoreGraphics
 import AppKit
 
-/// 全局快捷键监听器
 class HotkeyMonitor {
     var onEscape: (() -> Void)?
+    var isClicking: (() -> Bool)?
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var hotkeyHandlers: [Hotkey: () -> Void] = [:]
+    private var generation = UUID()
+    private var pressedKeys: Set<UInt16> = []
 
-    init() {}
-
-    /// 注册快捷键及其回调
     func registerHotkey(_ hotkey: Hotkey, handler: @escaping () -> Void) {
         hotkeyHandlers[hotkey] = handler
     }
 
-    /// 开始监听全局按键事件
-    func startMonitoring() {
-        // 如果已经在监听，先停止
-        if eventTap != nil {
-            print("⚠️  检测到已有监听器，先停止旧的")
-            stopMonitoring()
-        }
-
-        // 检查辅助功能权限
-        guard checkAccessibilityPermission() else {
-            print("❌ 错误: 请在系统偏好设置 -> 安全性与隐私 -> 辅助功能 中授予本应用权限")
-            return
-        }
-
-        let eventMask = (1 << CGEventType.keyDown.rawValue)
-
-        // 创建事件回调
-        let callback: CGEventTapCallBack = { proxy, type, event, refcon in
+    @discardableResult
+    func startMonitoring() -> Bool {
+        if let eventTap = eventTap { return CGEvent.tapIsEnabled(tap: eventTap) }
+        guard AXIsProcessTrusted() else { return false }
+        let eventMask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
+        let callback: CGEventTapCallBack = { _, type, event, refcon in
             guard let refcon = refcon else { return Unmanaged.passUnretained(event) }
             let monitor = Unmanaged<HotkeyMonitor>.fromOpaque(refcon).takeUnretainedValue()
-            return monitor.handleEvent(proxy: proxy, type: type, event: event)
+            return monitor.handleEvent(type: type, event: event)
         }
-
-        // 创建事件监听器
-        // ⚠️ 使用 .cghidEventTap 以支持后台运行时的全局快捷键监听
-        let selfPointer = Unmanaged.passUnretained(self).toOpaque()
         eventTap = CGEvent.tapCreate(
-            tap: .cghidEventTap,  // 系统级事件监听，支持后台运行
-            place: .headInsertEventTap,
-            options: .defaultTap,
-            eventsOfInterest: CGEventMask(eventMask),
-            callback: callback,
-            userInfo: selfPointer
-        )
-
-        guard let eventTap = eventTap else {
-            print("❌ 错误: 无法创建事件监听器，请检查辅助功能权限")
-            return
-        }
-
-        // 添加到运行循环
+            tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
+            eventsOfInterest: CGEventMask(eventMask), callback: callback,
+            userInfo: Unmanaged.passUnretained(self).toOpaque())
+        guard let eventTap = eventTap else { return false }
         runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
-        CFRunLoopAddSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
+        CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
         CGEvent.tapEnable(tap: eventTap, enable: true)
-
-        print("🚀 全局快捷键监听已启动，已注册 \(hotkeyHandlers.count) 个快捷键")
+        return CGEvent.tapIsEnabled(tap: eventTap)
     }
 
-    /// 停止监听
     func stopMonitoring() {
+        generation = UUID()
         if let eventTap = eventTap {
             CGEvent.tapEnable(tap: eventTap, enable: false)
             CFMachPortInvalidate(eventTap)
-            self.eventTap = nil
         }
         if let runLoopSource = runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), runLoopSource, .commonModes)
-            self.runLoopSource = nil
+            CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
         }
-
-        // ⚠️ 关键：清理已注册的快捷键，防止重复注册
-        let count = hotkeyHandlers.count
+        eventTap = nil
+        runLoopSource = nil
         hotkeyHandlers.removeAll()
-
-        print("⏹️ 全局快捷键监听已停止，已清理 \(count) 个快捷键")
+        pressedKeys.removeAll()
     }
 
-    /// 处理按键事件
-    private func handleEvent(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent> {
+    // Internal for regression tests; nil means the matched key is consumed.
+    func handleEvent(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            pressedKeys.removeAll()
             if let eventTap = eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
             return Unmanaged.passUnretained(event)
         }
-        // 如果不是按键按下事件，直接传递
-        guard type == .keyDown else {
-            return Unmanaged.passUnretained(event)
-        }
-
         let keyCode = UInt16(event.getIntegerValueField(.keyboardEventKeycode))
+        if type == .keyUp {
+            return pressedKeys.remove(keyCode) != nil ? nil : Unmanaged.passUnretained(event)
+        }
+        guard type == .keyDown else { return Unmanaged.passUnretained(event) }
+        if pressedKeys.contains(keyCode) { return nil }
         let flags = event.flags
-        if event.getIntegerValueField(.keyboardEventAutorepeat) != 0 {
-            return Unmanaged.passUnretained(event)
-        }
-        if keyCode == 53 {
-            DispatchQueue.main.async { [weak self] in self?.onEscape?() }
-            return Unmanaged.passUnretained(event)
-        }
-
-        // 构造当前按键信息
-        let currentHotkey = Hotkey(
-            keyCode: keyCode,
-            commandKey: flags.contains(.maskCommand),
-            optionKey: flags.contains(.maskAlternate),
-            controlKey: flags.contains(.maskControl),
-            shiftKey: flags.contains(.maskShift)
-        )
-
-        // 检查是否匹配已注册的快捷键
-        if let handler = hotkeyHandlers[currentHotkey] {
-            print("⌨️  触发快捷键: keyCode=\(keyCode)")
-            // 在主线程执行，确保对象生命周期安全
+        let hotkey = Hotkey(keyCode: keyCode, commandKey: flags.contains(.maskCommand),
+                            optionKey: flags.contains(.maskAlternate), controlKey: flags.contains(.maskControl),
+                            shiftKey: flags.contains(.maskShift))
+        let handler = keyCode == 53 && isClicking?() == true ? onEscape : hotkeyHandlers[hotkey]
+        guard let handler = handler else { return Unmanaged.passUnretained(event) }
+        pressedKeys.insert(keyCode)
+        if event.getIntegerValueField(.keyboardEventAutorepeat) == 0 {
+            let generation = generation
             DispatchQueue.main.async { [weak self] in
-                guard self != nil else { return }
+                guard self?.generation == generation else { return }
                 handler()
             }
-            // 拦截该事件，防止传递到其他应用
-            return Unmanaged.passUnretained(event)
         }
-
-        return Unmanaged.passUnretained(event)
+        return nil
     }
 
-    /// 检查辅助功能权限
-    private func checkAccessibilityPermission() -> Bool {
-        // 直接使用系统权限请求（带提示弹窗）
-        let options: NSDictionary = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
-        return AXIsProcessTrustedWithOptions(options) as Bool
-    }
-
-    deinit {
-        stopMonitoring()
-    }
+    deinit { stopMonitoring() }
 }

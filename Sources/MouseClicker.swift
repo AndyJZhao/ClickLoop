@@ -2,9 +2,12 @@ import Foundation
 import CoreGraphics
 import AppKit
 
-/// 鼠标点击执行器
+/// UI methods run on the main thread; the serial queue owns the click timer.
 class MouseClicker {
-    private var timer: Timer?
+    private let queue = DispatchQueue(label: "ClickLoop.clicks", qos: .userInteractive)
+    private var timer: DispatchSourceTimer?
+    private var runID: UUID?
+    private var activity: NSObjectProtocol?
     private(set) var activeSchemeID: UUID?
     var onRunningChanged: ((Bool) -> Void)?
     private let clickAction: (MouseButton) -> Void
@@ -16,74 +19,82 @@ class MouseClicker {
         self.startSound = startSound
     }
 
-    /// Called on the main run loop, alongside hotkeys and UI stop actions.
     func executeScheme(_ scheme: ClickScheme) {
         stop()
         guard ClickScheme.isValidTiming(clickCount: scheme.clickCount,
                                         duration: scheme.totalDuration) else { return }
+        let runID = UUID()
+        self.runID = runID
         activeSchemeID = scheme.id
+        activity = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
+            reason: "User-requested automatic clicking")
         onRunningChanged?(true)
         startSound()
-        var remaining = scheme.clickCount
-        let timer = Timer(timeInterval: scheme.clickInterval, repeats: true) { [weak self] timer in
-            guard let self = self, self.activeSchemeID == scheme.id else {
-                timer.invalidate()
-                return
+        let clickAction = self.clickAction
+        queue.sync {
+            let timer = DispatchSource.makeTimerSource(flags: .strict, queue: queue)
+            var remaining = scheme.clickCount
+            timer.schedule(deadline: .now(), repeating: scheme.clickInterval, leeway: .nanoseconds(0))
+            timer.setEventHandler { [weak self] in
+                clickAction(scheme.button)
+                if !scheme.isUnlimited {
+                    remaining -= 1
+                    if remaining == 0 {
+                        self?.timer?.cancel()
+                        DispatchQueue.main.async { [weak self] in
+                            guard self?.runID == runID else { return }
+                            self?.stop()
+                        }
+                    }
+                }
             }
-            self.clickAction(scheme.button)
-            if !scheme.isUnlimited {
-                remaining -= 1
-                if remaining == 0 { self.stop() }
-            }
+            self.timer = timer
+            timer.resume()
         }
-        self.timer = timer
-        RunLoop.main.add(timer, forMode: .common)
-        timer.fire()
     }
 
     func stop() {
-        timer?.invalidate()
-        timer = nil
+        // Wait only for an in-flight down/up pair, never for the next click interval.
+        queue.sync {
+            timer?.cancel()
+            timer = nil
+        }
+        runID = nil
         activeSchemeID = nil
+        if let activity = activity { ProcessInfo.processInfo.endActivity(activity) }
+        activity = nil
         onRunningChanged?(false)
     }
 
-    deinit { timer?.invalidate() }
-
-    /// 模拟鼠标点击
-    static func simulateClick(button: MouseButton) {
-        // 获取当前鼠标位置（实时获取，允许用户移动鼠标）
-        guard let currentLocation = CGEvent(source: nil)?.location else { return }
-
-        // 创建鼠标按下事件（在当前位置点击，不强制移动鼠标）
-        guard let mouseDown = CGEvent(
-            mouseEventSource: nil,
-            mouseType: button.downEventType,
-            mouseCursorPosition: currentLocation,
-            mouseButton: button == .left ? .left : .right
-        ) else {
-            print("❌ 无法创建鼠标按下事件")
-            return
-        }
-
-        // 创建鼠标抬起事件
-        guard let mouseUp = CGEvent(
-            mouseEventSource: nil,
-            mouseType: button.upEventType,
-            mouseCursorPosition: currentLocation,
-            mouseButton: button == .left ? .left : .right
-        ) else {
-            print("❌ 无法创建鼠标抬起事件")
-            return
-        }
-
-        // 发送事件到系统
-        mouseDown.post(tap: .cghidEventTap)
-
-        // 添加极小延迟（模拟真实点击的按下-抬起过程）
-        Thread.sleep(forTimeInterval: 0.001)
-
-        mouseUp.post(tap: .cghidEventTap)
+    deinit {
+        timer?.cancel()
+        if let activity = activity { ProcessInfo.processInfo.endActivity(activity) }
     }
 
+    static func clickEvents(button: MouseButton, at location: CGPoint) -> (CGEvent, CGEvent)? {
+        guard let source = CGEventSource(stateID: .privateState) else { return nil }
+        source.localEventsSuppressionInterval = 0
+        guard let down = CGEvent(mouseEventSource: source, mouseType: button.downEventType,
+                                 mouseCursorPosition: location, mouseButton: button == .left ? .left : .right),
+              let up = CGEvent(mouseEventSource: source, mouseType: button.upEventType,
+                               mouseCursorPosition: location, mouseButton: button == .left ? .left : .right)
+        else { return nil }
+        // Holding the trigger shortcut must not turn clicks into Control/Command-clicks.
+        for event in [down, up] {
+            event.flags = []
+            event.setIntegerValueField(.mouseEventClickState, value: 1)
+        }
+        down.setDoubleValueField(.mouseEventPressure, value: 1)
+        up.setDoubleValueField(.mouseEventPressure, value: 0)
+        return (down, up)
+    }
+
+    static func simulateClick(button: MouseButton) {
+        guard let location = CGEvent(source: nil)?.location,
+              let (down, up) = clickEvents(button: button, at: location) else { return }
+        down.post(tap: .cghidEventTap)
+        Thread.sleep(forTimeInterval: 0.001)
+        up.post(tap: .cghidEventTap)
+    }
 }

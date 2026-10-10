@@ -6,6 +6,10 @@ class ClickerViewModel: ObservableObject {
     @Published var schemes: [ClickScheme] = []
     @Published var isRunning: Bool = false
     @Published var isClicking: Bool = false
+    @Published var needsAccessibilityPermission = false
+    @Published var monitoringFailed = false
+    private var monitoringPaused = false
+    private var permissionRetryTimer: Timer?
 
     private let schemeManager = SchemeManager()
     private let hotkeyMonitor = HotkeyMonitor()
@@ -14,6 +18,7 @@ class ClickerViewModel: ObservableObject {
     init() {
         mouseClicker.onRunningChanged = { [weak self] running in self?.isClicking = running }
         hotkeyMonitor.onEscape = { [weak self] in self?.stopClicking() }
+        hotkeyMonitor.isClicking = { [weak self] in self?.isClicking == true }
         loadSchemes()
 
         // 如果有已启用的方案，自动启动监听器
@@ -26,6 +31,7 @@ class ClickerViewModel: ObservableObject {
     }
 
     deinit {
+        permissionRetryTimer?.invalidate()
         // 停止监听
         if isRunning {
             hotkeyMonitor.stopMonitoring()
@@ -63,14 +69,7 @@ class ClickerViewModel: ObservableObject {
                 // ⚠️ 关键：立即更新内存中的方案数组，确保 UI 立即刷新
                 schemes[index] = newScheme
 
-                // 如果正在运行，需要重新注册所有快捷键以确保使用最新配置
-                if isRunning {
-                    print("🔄 方案已更新，重新启动监听器以应用新配置")
-                    stopClicker()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        self.startClicker()
-                    }
-                }
+                startClicker()
             case .failure(let error):
                 showAlert(title: "更新方案失败", message: error.localizedDescription)
             }
@@ -82,15 +81,7 @@ class ClickerViewModel: ObservableObject {
             if schemeManager.deleteScheme(at: index) {
                 loadSchemes()
 
-                // 如果正在运行，需要重新注册快捷键
-                if isRunning {
-                    stopClicker()
-                    if !schemes.isEmpty {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                            self.startClicker()
-                        }
-                    }
-                }
+                startClicker()
             }
         }
     }
@@ -106,22 +97,7 @@ class ClickerViewModel: ObservableObject {
 
         _ = schemeManager.updateScheme(at: index, with: schemes[index])
 
-        // 更新监听器状态 - 统一处理：重新启动以确保快捷键正确注册
-        let enabledCount = schemes.filter { $0.isEnabled }.count
-        print("📊 当前已启用方案数: \(enabledCount)")
-
-        if enabledCount == 0 {
-            print("⏹️ 所有方案已禁用，停止监听器")
-            stopClicker()
-        } else {
-            print("🔄 重新启动监听器以确保快捷键正确注册")
-            if isRunning {
-                stopClicker()
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                self.startClicker()
-            }
-        }
+        startClicker()
     }
 
     func enableAllSchemes() {
@@ -134,40 +110,20 @@ class ClickerViewModel: ObservableObject {
         }
         loadSchemes()
 
-        // 启动全局监听
-        if !isRunning {
-            startClicker()
-        } else {
-            // 重新注册所有快捷键
-            stopClicker()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                self.startClicker()
-            }
-        }
+        startClicker()
     }
 
     // MARK: - 快捷键录制支持
 
     func pauseHotkeyMonitoring() {
-        stopClicking()
-        if isRunning {
-            hotkeyMonitor.stopMonitoring()
-            print("⏸️ 暂停快捷键监听（录制中）")
-        }
+        monitoringPaused = true
+        stopClicker()
     }
 
     func resumeHotkeyMonitoring() {
-        if isRunning {
-            // ⚠️ 关键：需要重新启动监听并注册所有快捷键
-            hotkeyMonitor.startMonitoring()
-
-            // 重新注册所有已启用方案的快捷键
-            let enabledSchemes = schemes.filter { $0.isEnabled }
-            for scheme in enabledSchemes {
-                registerHotkey(for: scheme)
-            }
-            print("▶️ 恢复快捷键监听，已注册 \(enabledSchemes.count) 个方案")
-        }
+        guard monitoringPaused else { return }
+        monitoringPaused = false
+        startClicker()
     }
 
     func disableAllSchemes() {
@@ -189,29 +145,27 @@ class ClickerViewModel: ObservableObject {
     // MARK: - Clicker Control
 
     func startClicker() {
-        let enabledSchemes = schemes.filter { $0.isEnabled }
-
-        // ⚠️ 关键：如果没有启用的方案，直接返回（不弹窗提示）
-        guard !enabledSchemes.isEmpty else {
+        stopClicker()
+        guard !monitoringPaused, schemes.contains(where: { $0.isEnabled }) else { return }
+        needsAccessibilityPermission = !AXIsProcessTrusted()
+        guard !needsAccessibilityPermission else {
+            // Granting permission in Settings must recover without toggling a preset or relaunching.
+            permissionRetryTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                if AXIsProcessTrusted() { self?.startClicker() }
+            }
             return
         }
+        for scheme in schemes where scheme.isEnabled { registerHotkey(for: scheme) }
+        isRunning = hotkeyMonitor.startMonitoring()
+        monitoringFailed = !isRunning
+        NSLog("ClickLoop hotkey monitor ready: %d", isRunning)
+    }
 
-        hotkeyMonitor.stopMonitoring()
-        // 仅注册已启用方案的快捷键
-        for scheme in enabledSchemes {
-            registerHotkey(for: scheme)
-        }
-
-        hotkeyMonitor.startMonitoring()
-
-        // 只有在权限已授予的情况下才标记为运行中
-        if AXIsProcessTrusted() {
-            isRunning = true
-            print("✅ 监听器启动完成，isRunning = \(isRunning)")
-            showNotification(title: "ClickLoop \(L.started)", message: "\(L.loaded) \(enabledSchemes.count) \(L.schemes)")
-        } else {
-            print("❌ 监听器启动失败：权限未授予")
-        }
+    func requestAccessibilityPermission() {
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(options)
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+        startClicker()
     }
 
     func stopClicking() {
@@ -220,16 +174,18 @@ class ClickerViewModel: ObservableObject {
 
     func stopClicker() {
         stopClicking()
+        permissionRetryTimer?.invalidate()
+        permissionRetryTimer = nil
         hotkeyMonitor.stopMonitoring()
         isRunning = false
-
-        showNotification(title: "ClickLoop \(L.stopped)", message: L.clickerStopped)
+        needsAccessibilityPermission = false
+        monitoringFailed = false
     }
 
     private func registerHotkey(for scheme: ClickScheme) {
         let schemeId = scheme.id  // 捕获ID而不是整个scheme
         hotkeyMonitor.registerHotkey(scheme.hotkey) { [weak self] in
-            guard let self = self else { return }
+            guard let self = self, self.isRunning, !self.monitoringPaused else { return }
 
             // 通过ID查找最新的scheme，确保使用最新的参数
             guard let currentScheme = self.schemes.first(where: { $0.id == schemeId }) else {
@@ -246,24 +202,11 @@ class ClickerViewModel: ObservableObject {
             let clicker = self.mouseClicker
             clicker.executeScheme(currentScheme)
 
-            self.showNotification(
-                title: L.executing,
-                message: currentScheme.isUnlimited ? L.unlimitedDescription(cps: 1 / currentScheme.clickInterval) : "\(currentScheme.name) - \(currentScheme.clickCount)\(LocalizationManager.shared.currentLanguage == .chinese ? "次" : "x")/\(String(format: "%.1f", currentScheme.totalDuration))\(LocalizationManager.shared.currentLanguage == .chinese ? "秒" : "s")"
-            )
+            NSLog("ClickLoop started: %.4g CPS, unlimited: %d", 1 / currentScheme.clickInterval, currentScheme.isUnlimited)
         }
     }
 
     // MARK: - Helper Methods
-
-    private func showNotification(title: String, message: String) {
-        let notification = NSUserNotification()
-        notification.title = title
-        notification.informativeText = message
-        // 使用系统成功音效（Glass 音效）
-        notification.soundName = "Glass"
-
-        NSUserNotificationCenter.default.deliver(notification)
-    }
 
     private func showAlert(title: String, message: String) {
         DispatchQueue.main.async {

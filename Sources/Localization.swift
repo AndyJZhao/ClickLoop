@@ -72,6 +72,23 @@ struct L {
             "∞ 无限 · %.4g 次/秒" : "∞ Unlimited · %.4g CPS", cps)
     }
 
+    static var accessibilityRequired: String {
+        LocalizationManager.shared.currentLanguage == .chinese ?
+            "需要辅助功能权限，快捷键尚未运行" : "Accessibility permission needed; hotkeys are not active"
+    }
+
+    static var openAccessibility: String {
+        LocalizationManager.shared.currentLanguage == .chinese ? "打开辅助功能设置" : "Open Accessibility Settings"
+    }
+
+    static var hotkeysReady: String {
+        LocalizationManager.shared.currentLanguage == .chinese ? "快捷键已就绪" : "Hotkeys ready"
+    }
+
+    static var retryHotkeys: String {
+        LocalizationManager.shared.currentLanguage == .chinese ? "快捷键监听失败，点击重试" : "Hotkey listener failed — retry"
+    }
+
     // 按钮
     static var leftButton: String {
         LocalizationManager.shared.currentLanguage == .chinese ? "左键" : "Left"
@@ -150,8 +167,8 @@ struct L {
 
     static var currentCPS: String {
         LocalizationManager.shared.currentLanguage == .chinese ?
-            "当前 CPS: %.4g" :
-            "Current CPS: %.4g"
+            "目标 CPS: %.4g" :
+            "Target CPS: %.4g"
     }
 
     // 提示信息

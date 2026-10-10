@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ClickLoop input probe</title>
+<style>
+  body { margin: 0; padding: 48px; min-height: 100vh; box-sizing: border-box;
+         font: 20px system-ui; background: #e9f4ff; user-select: none; }
+  pre { white-space: pre-wrap; font: 18px ui-monospace, monospace; }
+</style>
+<h1>ClickLoop input probe — harmless click target</h1>
+<p>Place the pointer here, then press the preset hotkey. Reload to reset.</p>
+<p>For a 100-click / 1-second preset, expect 100 down/up pairs, 100 clicks,
+   about 100 CPS and no modified clicks. A gap longer than one second starts a new burst,
+   excluding earlier manual clicks from that burst's rate.</p>
+<pre id="stats">Waiting for input</pre>
+<script>
+  let total = 0, times = [], ups = 0, clicks = 0, modified = 0, leakedShortcuts = 0;
+  function render() {
+    const span = times.length > 1 ? times.at(-1) - times[0] : 0;
+    document.querySelector('#stats').textContent = JSON.stringify({
+      totalMouseDowns: total,
+      lastBurst: { downs: times.length, ups, clicks,
+        spanMs: +span.toFixed(2), cps: span ? +((times.length - 1) * 1000 / span).toFixed(2) : 0,
+        modifiedClicks: modified },
+      ctrlCommandCReceivedByPage: leakedShortcuts
+    }, null, 2);
+  }
+  addEventListener('mousedown', event => {
+    if (!event.isTrusted) return;
+    const now = performance.now();
+    if (times.length && now - times.at(-1) > 1000) { times = []; ups = clicks = modified = 0; }
+    total++;
+    times.push(now);
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) modified++;
+    render();
+  });
+  addEventListener('mouseup', event => { if (event.isTrusted) { ups++; render(); } });
+  addEventListener('click', event => { if (event.isTrusted) { clicks++; render(); } });
+  addEventListener('keydown', event => {
+    if (event.ctrlKey && event.metaKey && event.key.toLowerCase() === 'c') { leakedShortcuts++; render(); }
+  });
+  addEventListener('contextmenu', event => event.preventDefault());
+</script>

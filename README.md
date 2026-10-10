@@ -8,6 +8,8 @@ A small native macOS auto-clicker, forked from [mmmelson/SnapClick](https://gith
 
 - **Long durations:** enter positive durations beyond 60 seconds, including minutes or hours (in seconds).
 - **Unlimited clicking:** turn on **Run indefinitely**. Click Count and Every (sec) set the rate: `10 / 1` means 10 clicks per second, continuously until stopped.
+- **Reliable hotkeys:** the window shows whether monitoring is ready or permission is missing. Granting Accessibility recovers automatically. Matched shortcuts are consumed so the foreground app does not also act on them.
+- **Accurate scheduling:** clicks run on a dedicated serial timer with App Nap protection during execution; click events do not inherit shortcut modifiers.
 - **Immediate stop:** press the same preset hotkey again, press **Esc**, or use **Stop clicking** in the main window or menu-bar popover. Disabling presets, editing a preset, and quitting also stop active clicks.
 - **Launch animation:** the app icon animates in the window header and the menu-bar icon pulses briefly at launch. Reduce Motion is respected.
 
@@ -37,6 +39,10 @@ If Swift reports an SDK/compiler version mismatch, select an installed SDK compa
 ```
 
 Smoke checks cover long durations, invalid input and rate limits, finite completion, unlimited repetition, immediate cancellation, replacing a running preset, and new/legacy preset persistence. They inject a click sink and **never send mouse events**. For a manual end-to-end check, grant Accessibility, set a preset to 10 clicks / 1 second with Run indefinitely enabled, move over a harmless target, and press its hotkey. Verify that Esc and the same hotkey both stop it. Also verify that 600 seconds saves and survives reopening the editor.
+
+`Tests/ClickTarget.html` is a harmless browser counter for end-to-end testing: open it in a browser, place the pointer in the blue area, reload to reset the counter, and trigger a 100-click / 1-second preset. Expect 100 mouse-down/up pairs, 100 click events, about 100 CPS, and zero modified clicks. The last-burst counter excludes manual clicks separated by more than one second. A physical-keyboard check on 2026-10-11 delivered all 100 clicks at 97.17 CPS in Chrome, with no shortcut modifiers; the internal timing check measured 100.00 CPS. The internal tests also measure 100 CPS while blocking the main thread and check hotkey consumption, held-key suppression, and Esc routing.
+
+Local ad-hoc builds have a new code signature after rebuilding. macOS may require removing/re-adding ClickLoop in Accessibility even if the old entry still appears enabled. The app reports its actual authorization and listener state.
 
 ## Upstream and license
 

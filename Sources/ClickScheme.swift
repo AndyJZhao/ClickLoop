@@ -58,6 +58,7 @@ struct ClickScheme: Hashable, Identifiable, Codable {
 
 /// 快捷键定义
 struct Hotkey: Hashable, Codable {
+    static let unassignedKey = UInt16.max
     let keyCode: UInt16
     let modifierFlags: CGEventFlags
 

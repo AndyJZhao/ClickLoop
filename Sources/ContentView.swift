@@ -54,6 +54,23 @@ struct ContentView: View {
 
             Divider()
 
+            if viewModel.needsAccessibilityPermission {
+                VStack(spacing: 6) {
+                    Text(L.accessibilityRequired)
+                        .font(.caption)
+                    Button(L.openAccessibility, action: viewModel.requestAccessibilityPermission)
+                }
+                .padding(10)
+            } else if viewModel.monitoringFailed {
+                Button(L.retryHotkeys, action: viewModel.startClicker)
+                    .padding(10)
+            } else if viewModel.isRunning {
+                Text(viewModel.isClicking ? L.running : L.hotkeysReady)
+                    .font(.caption)
+                    .foregroundColor(.green)
+                    .padding(.top, 6)
+            }
+
             // 主内容区：只显示方案列表
             mainPanel
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -231,7 +248,7 @@ struct SchemeCard: View {
         Binding(
             get: { scheme.isEnabled },
             set: { newValue in
-                if newValue && scheme.hotkey.keyCode == 0 {
+                if newValue && scheme.hotkey.keyCode == Hotkey.unassignedKey {
                     showHotkeyRequiredAlert()
                 } else {
                     viewModel.toggleScheme(scheme)
@@ -312,7 +329,7 @@ struct SchemeEditorSheet: View {
             _button = State(initialValue: .left)
             _clickCount = State(initialValue: "10")
             _totalDuration = State(initialValue: "1.0")
-            _recordedKeyCode = State(initialValue: 0)
+            _recordedKeyCode = State(initialValue: Hotkey.unassignedKey)
             _recordedCommand = State(initialValue: true)
             _recordedOption = State(initialValue: true)
             _recordedControl = State(initialValue: false)
@@ -325,7 +342,7 @@ struct SchemeEditorSheet: View {
             return false
         }
         return ClickScheme.isValidTiming(clickCount: count, duration: duration) &&
-            recordedKeyCode != 0 && recordedKeyCode != 53
+            recordedKeyCode != Hotkey.unassignedKey && recordedKeyCode != 53
     }
 
     // 计算当前的CPS
@@ -338,7 +355,7 @@ struct SchemeEditorSheet: View {
 
     // 检查快捷键是否已配置
     private var hasHotkey: Bool {
-        recordedKeyCode != 0
+        recordedKeyCode != Hotkey.unassignedKey
     }
 
     // 计算当前方案的显示名称
@@ -654,7 +671,7 @@ struct SchemeEditorSheet: View {
     }
 
     private func clearHotkey() {
-        recordedKeyCode = 0
+        recordedKeyCode = Hotkey.unassignedKey
         recordedCommand = false
         recordedOption = false
         recordedControl = false
